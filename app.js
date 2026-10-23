@@ -92,6 +92,7 @@ function viewAuth(mode = 'login') {
 const load0 = k => JSON.parse(localStorage.getItem(k) || '{}');
 function enter() {
   jokes = load('jokes', []); sets = load('sets', []);
+  navigator.storage?.persist?.().catch(() => {}); // просим браузер не стирать данные при нехватке места
   document.body.classList.add('authed');
     go('jokes');
 }
@@ -99,6 +100,35 @@ document.getElementById('logout').onclick = () => {
   if (stage.running) return alert('Сначала закончи выступление.');
   localStorage.removeItem('buddy_session'); user = null; viewAuth();
 };
+
+// ---------- backup helpers ----------
+const bkKey = () => key('lastbackup');
+const markBackup = () => localStorage.setItem(bkKey(), String(Date.now()));
+const backupAge = () => { const t = +localStorage.getItem(bkKey()); return t ? Math.floor((Date.now() - t) / 864e5) : null; };
+const backupStale = () => (jokes.length || sets.length) && (backupAge() === null || backupAge() >= 7);
+const backupStatus = () => {
+  const a = backupAge();
+  return 'Данные хранятся только на этом устройстве. ' +
+    (a === null ? 'Копии ещё не было.' : a === 0 ? 'Последняя копия — сегодня.' : `Последняя копия — ${a} дн. назад.`) +
+    ' Нажми «Сохранить копию» и выбери «Сохранить в Файлы».';
+};
+const backupName = sfx => `buddy-${user}-${new Date().toISOString().slice(0, 10)}${sfx ? '-' + sfx : ''}.json`;
+// iPhone: системное меню «Поделиться» (→ Файлы); где не поддерживается — обычная загрузка
+async function shareFile(blob, name) {
+  for (const type of ['application/json', 'text/plain']) {
+    const f = new File([blob], name, { type });
+    if (!navigator.canShare?.({ files: [f] })) continue;
+    try { await navigator.share({ files: [f], title: name }); return true; }
+    catch (e) { if (e.name === 'AbortError') return false; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return true;
+}
+const blobToB64 = b => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(',')[1]); fr.onerror = () => rej(fr.error); fr.readAsDataURL(b); });
+const b64ToBlob = (b64, type) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); };
+const allRecs = async () => ((await tx('readonly', s => s.getAll())) || []).filter(r => r.user === user);
 
 // ---------- jokes ----------
 const activeSet = () => sets.find(x => x.id === stage.setId) || sets[0];
@@ -113,8 +143,9 @@ function viewJokes() {
     <input type="file" id="file" accept=".txt,.md,.text,text/plain" hidden>
     <div id="setbar"></div>
     <div id="list"></div>
-    <div class="backup"><small>Данные хранятся только на этом устройстве. Сохрани копию шуток и сетов (без аудиозаписей), чтобы не потерять их.</small>
+    <div class="backup"><small id="bstat"></small>
       <button class="b g" id="exp">⇩ Сохранить копию</button>
+      <button class="b g" id="expa">⇩ Копия с записями</button>
       <button class="b g" id="rest">⇧ Восстановить</button>
       <input type="file" id="bfile" accept=".json,application/json" hidden></div>`;
   const draw = () => {
@@ -157,11 +188,22 @@ function viewJokes() {
     }
     const c = e.target.closest('.card'); if (c) editJoke(c.dataset.id);
   };
-  document.getElementById('exp').onclick = () => {
+  const bstat = document.getElementById('bstat');
+  bstat.textContent = backupStatus(); bstat.classList.toggle('stale', !!backupStale());
+  document.getElementById('exp').onclick = async () => {
     const blob = new Blob([JSON.stringify({ app: 'comedyos', v: 1, jokes, sets }, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `buddy-${user}-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    if (await shareFile(blob, backupName())) { markBackup(); viewJokes(); }
+  };
+  // копия с записями: два шага (сначала готовим файл, потом «Поделиться»), т.к. iOS требует нажатия прямо перед меню
+  document.getElementById('expa').onclick = async e => {
+    const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Готовлю…';
+    try {
+      const recs = [];
+      for (const r of await allRecs()) { const { blob, ...rest } = r; recs.push({ ...rest, mime: blob.type, data: await blobToB64(blob) }); }
+      const blob = new Blob([JSON.stringify({ app: 'comedyos', v: 2, jokes, sets, recs })], { type: 'application/json' });
+      btn.disabled = false; btn.textContent = `⇩ Сохранить файл (${(blob.size / 1048576).toFixed(1)} МБ, записей: ${recs.length})`;
+      btn.onclick = async () => { if (await shareFile(blob, backupName('full'))) { markBackup(); viewJokes(); } };
+    } catch { btn.disabled = false; btn.textContent = '⇩ Копия с записями'; alert('Не удалось подготовить копию с записями.'); }
   };
   document.getElementById('rest').onclick = () => document.getElementById('bfile').click();
   document.getElementById('bfile').onchange = async e => {
@@ -169,8 +211,11 @@ function viewJokes() {
     try {
       const d = JSON.parse(await f.text());
       if (d.app !== 'comedyos' || !Array.isArray(d.jokes) || !Array.isArray(d.sets)) throw 0;
-      if (!confirm(`В копии: шуток ${d.jokes.length}, сетов ${d.sets.length}. Заменить текущие данные?`)) return;
-      jokes = d.jokes; sets = d.sets; save('jokes', jokes); save('sets', sets); viewJokes();
+      const nr = Array.isArray(d.recs) ? d.recs.length : 0;
+      if (!confirm(`В копии: шуток ${d.jokes.length}, сетов ${d.sets.length}${nr ? ', записей ' + nr : ''}. Заменить текущие данные?`)) return;
+      jokes = d.jokes; sets = d.sets; save('jokes', jokes); save('sets', sets);
+      for (const { mime, data, ...r } of d.recs || []) await tx('readwrite', s => s.put({ ...r, user, blob: b64ToBlob(data, mime) }));
+      markBackup(); viewJokes();
     } catch { alert('Это не файл копии БАДДИ.'); }
   };
 }

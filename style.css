@@ -84,3 +84,4 @@ audio{width:100%;margin:8px 0 10px;border-radius:12px}
 .imp>div{flex:1;white-space:pre-wrap;font-size:14px}
 .backup{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
 .backup small{display:block;margin-bottom:10px}
+.backup small.stale{color:var(--y);font-weight:700}
