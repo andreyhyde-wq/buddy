@@ -1,0 +1,9 @@
+{
+  "name": "БАДДИ",
+  "short_name": "БАДДИ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#100b1e",
+  "theme_color": "#2d1b4e",
+  "icons": [{"src":"logo.png","sizes":"1024x1024","type":"image/png","purpose":"any"}]
+}
