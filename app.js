@@ -10,30 +10,14 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 
-// recordings (blobs) live in IndexedDB
-const dbp = new Promise((res, rej) => {
-  const r = indexedDB.open('comedyos', 1);
-  r.onupgradeneeded = () => r.result.createObjectStore('recs', { keyPath: 'id' });
-  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-});
-const tx = async (mode, fn) => {
-  const db = await dbp;
-  return new Promise((res, rej) => {
-    const req = fn(db.transaction('recs', mode).objectStore('recs'));
-    req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error);
-  });
-};
-
 // ---------- shell ----------
 const view = document.getElementById('view');
 let tab = 'jokes';
-const tabs = { jokes: viewJokes, sets: viewSets, stage: viewStage, recs: viewRecs };
+const tabs = { jokes: viewJokes, sets: viewSets, stage: viewStage };
 function go(t) {
   if (stage.running && t !== 'stage' && !confirm('Выступление идёт. Уйти с экрана?')) return;
   tab = t;
   view.onclick = null;
-  const n = jokes.length, w = n % 10 === 1 && n % 100 !== 11 ? 'шутка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'шутки' : 'шуток';
-  document.getElementById('who').textContent = `${n} ${w}`;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   tabs[t]();
 }
@@ -126,9 +110,6 @@ async function shareFile(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   return true;
 }
-const blobToB64 = b => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(',')[1]); fr.onerror = () => rej(fr.error); fr.readAsDataURL(b); });
-const b64ToBlob = (b64, type) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); };
-const allRecs = async () => ((await tx('readonly', s => s.getAll())) || []).filter(r => r.user === user);
 
 // ---------- jokes ----------
 const activeSet = () => sets.find(x => x.id === stage.setId) || sets[0];
@@ -136,7 +117,10 @@ function newSet(name = prompt('Название сета (напр. «Open mic �
   if (!name) return null;
   const s = { id: uid(), name, items: [], limit: 5 }; sets.push(s); stage.setId = s.id; save('sets', sets); return s;
 }
+const plural = n => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'шутка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'шутки' : 'шуток');
+const updateCount = () => { document.getElementById('who').textContent = plural(jokes.length); };
 function viewJokes() {
+  updateCount();
   view.innerHTML = `<div class="bar"><input id="q" placeholder="Поиск по шуткам и тегам">
       <button class="b" id="new">＋ Шутка</button></div>
     <button class="b g" id="imp">⇪ Импорт из файла</button>
@@ -145,7 +129,6 @@ function viewJokes() {
     <div id="list"></div>
     <div class="backup"><small id="bstat"></small>
       <button class="b g" id="exp">⇩ Сохранить копию</button>
-      <button class="b g" id="expa">⇩ Копия с записями</button>
       <button class="b g" id="rest">⇧ Восстановить</button>
       <input type="file" id="bfile" accept=".json,application/json" hidden></div>`;
   const draw = () => {
@@ -194,27 +177,14 @@ function viewJokes() {
     const blob = new Blob([JSON.stringify({ app: 'comedyos', v: 1, jokes, sets }, null, 2)], { type: 'application/json' });
     if (await shareFile(blob, backupName())) { markBackup(); viewJokes(); }
   };
-  // копия с записями: два шага (сначала готовим файл, потом «Поделиться»), т.к. iOS требует нажатия прямо перед меню
-  document.getElementById('expa').onclick = async e => {
-    const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Готовлю…';
-    try {
-      const recs = [];
-      for (const r of await allRecs()) { const { blob, ...rest } = r; recs.push({ ...rest, mime: blob.type, data: await blobToB64(blob) }); }
-      const blob = new Blob([JSON.stringify({ app: 'comedyos', v: 2, jokes, sets, recs })], { type: 'application/json' });
-      btn.disabled = false; btn.textContent = `⇩ Сохранить файл (${(blob.size / 1048576).toFixed(1)} МБ, записей: ${recs.length})`;
-      btn.onclick = async () => { if (await shareFile(blob, backupName('full'))) { markBackup(); viewJokes(); } };
-    } catch { btn.disabled = false; btn.textContent = '⇩ Копия с записями'; alert('Не удалось подготовить копию с записями.'); }
-  };
   document.getElementById('rest').onclick = () => document.getElementById('bfile').click();
   document.getElementById('bfile').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     try {
       const d = JSON.parse(await f.text());
       if (d.app !== 'comedyos' || !Array.isArray(d.jokes) || !Array.isArray(d.sets)) throw 0;
-      const nr = Array.isArray(d.recs) ? d.recs.length : 0;
-      if (!confirm(`В копии: шуток ${d.jokes.length}, сетов ${d.sets.length}${nr ? ', записей ' + nr : ''}. Заменить текущие данные?`)) return;
+      if (!confirm(`В копии: шуток ${d.jokes.length}, сетов ${d.sets.length}. Заменить текущие данные?`)) return;
       jokes = d.jokes; sets = d.sets; save('jokes', jokes); save('sets', sets);
-      for (const { mime, data, ...r } of d.recs || []) await tx('readwrite', s => s.put({ ...r, user, blob: b64ToBlob(data, mime) }));
       markBackup(); viewJokes();
     } catch { alert('Это не файл копии БАДДИ.'); }
   };
@@ -261,6 +231,7 @@ function editJoke(id) {
   view.innerHTML = `<h2>${j.isNew ? 'Новая шутка' : 'Шутка'}</h2>
     <input id="t" placeholder="Название" value="${esc(j.title)}">
     <input id="g" placeholder="Теги через пробел (напр. работа семья)" value="${esc((j.tags || []).join(' '))}">
+    <input id="sh" placeholder="Кратко для сцены: опорные слова (необязательно)" value="${esc(j.short || '')}">
     <textarea id="x" placeholder="Сетап… панчлайн… теги">${esc(j.text)}</textarea>
     <label><small>Длительность, сек</small></label>
     <input id="s" type="number" min="0" value="${j.secs}">
@@ -269,7 +240,7 @@ function editJoke(id) {
   const $ = i => document.getElementById(i);
   $('ok').onclick = () => {
     const { isNew, ...rest } = j;
-    Object.assign(rest, { title: $('t').value.trim(), text: $('x').value, secs: +$('s').value || 0,
+    Object.assign(rest, { title: $('t').value.trim(), short: $('sh').value.trim(), text: $('x').value, secs: +$('s').value || 0,
       tags: $('g').value.split(/[\s,#]+/).filter(Boolean) });
     if (isNew) jokes.unshift(rest); else jokes[jokes.findIndex(x => x.id === j.id)] = rest;
     save('jokes', jokes); viewJokes();
@@ -288,7 +259,7 @@ const setTime = s => s.items.reduce((a, i) => a + (jokes.find(j => j.id === i)?.
 function viewSets() {
   view.innerHTML = `<button class="b" id="new">＋ Новый сет</button>` +
     (sets.map(s => `<div class="card" data-id="${s.id}"><b>${esc(s.name)}</b>
-      <small> · ${s.items.length} шуток · ~${fmt(setTime(s))} из ${s.limit} мин</small></div>`).join('')
+      <small> · ${plural(s.items.length)} · ~${fmt(setTime(s))} из ${s.limit} мин</small></div>`).join('')
       || '<br><small>Сет-листов пока нет.</small>');
   document.getElementById('new').onclick = () => {
     const name = prompt('Название сета (напр. «Open mic в пятницу»)'); if (!name) return;
@@ -329,29 +300,33 @@ function editSet(id) {
 }
 
 // ---------- stage ----------
-const stage = { setId: null, idx: 0, running: false, rec: true, t0: 0, marks: [], mr: null, chunks: [], stream: null, wake: null, tick: null };
+const stage = { setId: null, idx: 0, running: false, t0: 0, marks: [], mr: null, chunks: [], stream: null, wake: null, tick: null, full: null };
+// краткая версия для сцены: своё поле «short» или начало текста
+const briefOf = q => {
+  if (q.short) return q.short;
+  const t = q.text.replace(/\s+/g, ' ').trim();
+  return t.length > 70 ? t.slice(0, 70).replace(/\s+\S*$/, '') + '…' : t;
+};
+const MARK = ['', '😐', '🙂', '😂'], MARK_NAME = ['', 'не смешно', 'нормально', 'смешно'];
 function viewStage() {
   if (stage.running) return drawStage();
   const cur = activeSet();
   if (!cur) return view.innerHTML = '<div class="stage"><small>Сначала создай сет-лист.</small></div>';
   view.innerHTML = `<div class="stage"><div class="time" id="time">${fmt((cur?.limit || 5) * 60)}</div>
     <select id="set">${sets.map(s => `<option value="${s.id}" ${s.id === cur.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
-    <label><input type="checkbox" id="rec" ${stage.rec ? 'checked' : ''}> Записывать звук зала</label><br><br>
+    <small>Звук зала запишется автоматически — браузер спросит доступ к микрофону.</small><br><br>
     <button class="b v wide" id="go">▶ Начать выступление</button></div>`;
   document.getElementById('go').onclick = startShow;
 }
 async function startShow() {
   const sel = document.getElementById('set').value; if (!sel) return alert('Нет сет-листа');
-  stage.setId = sel; stage.idx = 0; stage.marks = []; stage.chunks = [];
-  stage.rec = document.getElementById('rec').checked;
-  if (stage.rec) {
-    try {
-      stage.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stage.mr = new MediaRecorder(stage.stream);
-      stage.mr.ondataavailable = e => e.data.size && stage.chunks.push(e.data);
-      stage.mr.start(1000);
-    } catch { if (!confirm('Нет доступа к микрофону. Продолжить без записи?')) return; stage.rec = false; stage.mr = null; }
-  }
+  stage.setId = sel; stage.idx = 0; stage.marks = []; stage.chunks = []; stage.mr = null;
+  try {
+    stage.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stage.mr = new MediaRecorder(stage.stream);
+    stage.mr.ondataavailable = e => e.data.size && stage.chunks.push(e.data);
+    stage.mr.start(1000);
+  } catch { if (!confirm('Нет доступа к микрофону. Продолжить без записи?')) return; stage.mr = null; }
   try { stage.wake = await navigator.wakeLock?.request('screen'); } catch {}
   stage.running = true; stage.t0 = Date.now();
   stage.tick = setInterval(drawTime, 250);
@@ -362,26 +337,34 @@ function drawStage() {
   view.innerHTML = `<div class="stage"><div class="time" id="time"></div>
     <small id="sub"></small>
     <div class="ctrl"><button class="b g" id="prev">←</button><button class="b" id="next">→</button></div>
-    <small class="hint">${stage.rec ? '● идёт запись' : 'без записи'} · нажми на шутку — покажу текст целиком</small>
+    <small class="hint">${stage.mr ? '● идёт запись' : 'без записи'} · нажми на шутку — покажу текст целиком</small>
     <div class="setlist" id="sl">${s.items.map((id, n) => {
       const q = jokes.find(x => x.id === id); if (!q) return '';
       const cls = n < stage.idx ? 'done' : n === stage.idx ? 'cur' : '';
-      return `<div class="si ${cls}" data-go="${n}"><h3>${n + 1}. ${esc(q.title || q.text.slice(0, 30))}</h3>${cls === 'cur' ? `<div class="txt">${esc(q.text)}</div>` : ''}</div>`;
+      const m = stage.marks.filter(x => x.jokeId === id).pop();
+      const full = stage.full === id;
+      return `<div class="si ${cls}" data-go="${n}"><h3>${n + 1}. ${esc(q.title || q.text.slice(0, 30))} ${m ? MARK[m.level] : ''}</h3>${cls === 'cur' ? `<div class="txt ${full ? '' : 'brief'}">${esc(full ? q.text : briefOf(q))}</div>${!full && briefOf(q) !== q.text ? '<small class="more">нажми — полный текст</small>' : ''}` : ''}</div>`;
     }).join('') || '<small>Сет-лист пуст</small>'}</div>
     ${stage.idx >= s.items.length ? '<h3>Сет закончился</h3>' : ''}
     <div class="marks"><button class="b g" data-m="1">😐</button><button class="b g" data-m="2">🙂</button><button class="b g" data-m="3">😂</button></div>
-    <small>Метки смеха фиксируют время для разбора записи</small><br><br>
+    <small>Оценка текущей шутки: 😐 не смешно · 🙂 нормально · 😂 смешно</small><br><br>
     <button class="b r" id="stop">■ Закончить</button></div>`;
   drawTime();
   const $ = i => document.getElementById(i);
-  $('prev').onclick = () => { stage.idx = Math.max(0, stage.idx - 1); drawStage(); };
-  $('next').onclick = () => { stage.idx = Math.min(s.items.length, stage.idx + 1); drawStage(); };
+  $('prev').onclick = () => { stage.idx = Math.max(0, stage.idx - 1); stage.full = null; drawStage(); };
+  $('next').onclick = () => { stage.idx = Math.min(s.items.length, stage.idx + 1); stage.full = null; drawStage(); };
   $('stop').onclick = stopShow;
-  $('sl').onclick = e => { const n = e.target.closest('[data-go]')?.dataset.go; if (n !== undefined) { stage.idx = +n; drawStage(); } };
+  $('sl').onclick = e => {
+    const n = e.target.closest('[data-go]')?.dataset.go; if (n === undefined) return;
+    if (+n === stage.idx) { const id = s.items[stage.idx]; stage.full = stage.full === id ? null : id; }
+    else { stage.idx = +n; stage.full = null; }
+    drawStage();
+  };
   view.querySelector('.marks').onclick = e => {
-    if (!e.target.dataset.m) return;
-    stage.marks.push({ t: (Date.now() - stage.t0) / 1000, level: +e.target.dataset.m, jokeId: s.items[stage.idx] });
-    navigator.vibrate?.(30);
+    const lvl = +e.target.dataset.m; const id = s.items[stage.idx];
+    if (!lvl || !id) return;
+    stage.marks.push({ t: (Date.now() - stage.t0) / 1000, level: lvl, jokeId: id });
+    navigator.vibrate?.(30); drawStage();
   };
 }
 function drawTime() {
@@ -397,37 +380,30 @@ async function stopShow() {
   clearInterval(stage.tick); stage.running = false;
   const duration = (Date.now() - stage.t0) / 1000;
   stage.wake?.release?.();
+  let blob = null, ext = 'webm';
   if (stage.mr) {
     await new Promise(r => { stage.mr.onstop = r; stage.mr.stop(); });
     stage.stream.getTracks().forEach(t => t.stop());
-    const s = sets.find(x => x.id === stage.setId);
-    const blob = new Blob(stage.chunks, { type: stage.mr.mimeType });
-    await tx('readwrite', st => st.put({ id: uid(), user, name: s.name, date: Date.now(), duration, blob, marks: stage.marks }));
+    blob = new Blob(stage.chunks, { type: stage.mr.mimeType });
+    ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
   }
-  stage.mr = null; go('recs');
+  stage.mr = null;
+  drawResult(sets.find(x => x.id === stage.setId), duration, blob, ext);
 }
-
-// ---------- recordings ----------
-let recUrls = [];
-async function viewRecs() {
-  const recs = ((await tx('readonly', s => s.getAll())) || []).filter(r => r.user === user).sort((a, b) => b.date - a.date);
-  recUrls.forEach(URL.revokeObjectURL); recUrls = [];
-  view.innerHTML = '<h2>Записи</h2>' + (recs.map(r => {
-    const lv = n => r.marks.filter(m => m.level === n).length;
-    const ext = r.blob.type.includes('mp4') ? 'm4a' : 'webm';
-    const url = URL.createObjectURL(r.blob); recUrls.push(url);
-    return `<div class="card"><b>${esc(r.name)}</b> <small>${new Date(r.date).toLocaleString()} · ${fmt(r.duration)}</small><br>
-      <small>😐 ${lv(1)} · 🙂 ${lv(2)} · 😂 ${lv(3)}</small>
-      <audio controls src="${url}"></audio>
-      <div>${r.marks.map(m => `<button class="b g sm" data-seek="${m.t}">${['', '😐', '🙂', '😂'][m.level]} ${fmt(m.t)}</button>`).join(' ')}</div><br>
-      <a class="b g" download="${esc(r.name)}.${ext}" href="${url}">Скачать</a>
-      <button class="b r" data-del="${r.id}">Удалить</button></div>`;
-  }).join('') || '<small>Записей пока нет.</small>');
-  view.onclick = async e => {
-    const d = e.target.dataset;
-    if (d.seek) { const a = e.target.closest('.card').querySelector('audio'); a.currentTime = Math.max(0, +d.seek - 3); a.play(); }
-    if (d.del && confirm('Удалить запись?')) { await tx('readwrite', s => s.delete(d.del)); viewRecs(); }
-  };
+// итог выступления: оценки по шуткам + кнопка сохранения записи
+function drawResult(s, duration, blob, ext) {
+  const rows = s.items.map(id => {
+    const q = jokes.find(x => x.id === id); if (!q) return '';
+    const ms = stage.marks.filter(m => m.jokeId === id);
+    const last = ms[ms.length - 1];
+    return `<div class="card"><b>${esc(q.title || q.text.slice(0, 30))}</b> ${last ? `${MARK[last.level]} <small>${MARK_NAME[last.level]}</small>` : '<small>без оценки</small>'}</div>`;
+  }).join('');
+  const name = `${s.name}-${new Date().toISOString().slice(0, 10)}`;
+  const url = blob && URL.createObjectURL(blob);
+  view.innerHTML = `<div class="stage"><h2>Готово · ${fmt(duration)}</h2>
+    ${blob ? `<a class="b v wide" id="save" download="${esc(name)}.${ext}" href="${url}">⇩ Сохранить запись</a><br><br><audio controls src="${url}"></audio><br><br>` : '<small>Запись не велась.</small><br><br>'}
+    ${rows}<br><button class="b g wide" id="done">Готово</button></div>`;
+  document.getElementById('done').onclick = () => { if (url) URL.revokeObjectURL(url); go('jokes'); };
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
