@@ -1,4 +1,4 @@
-const C = 'buddy-v9';
+const C = 'buddy-v13';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'logo.png', 'logo-t.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(FILES))));
 self.addEventListener('activate', e => e.waitUntil(

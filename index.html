@@ -13,12 +13,13 @@
 <link rel="stylesheet" href="style.css">
 <title>БАДДИ</title>
 </head>
-<body class="authed">
+<body>
 <header id="top">
   <img src="logo-t.png" alt="">
   <span class="brand">БАДДИ</span>
   <span id="who"></span>
-  <button class="b g sm" id="logout">Выйти</button>
+  <button class="b g sm" id="menu" aria-label="Меню">⋯</button>
+  <div id="panel" hidden></div>
 </header>
 <nav id="tabs">
   <button data-tab="jokes">Шутки</button>
@@ -26,6 +27,8 @@
   <button data-tab="stage">На сцену</button>
 </nav>
 <main id="view"></main>
+<input type="file" id="file" accept=".txt,.md,.text,text/plain" hidden>
+<input type="file" id="bfile" accept=".json,application/json" hidden>
 <script src="app.js"></script>
 </body>
 </html>
