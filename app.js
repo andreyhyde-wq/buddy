@@ -90,14 +90,49 @@ async function exportBackup() {
   const blob = new Blob([JSON.stringify({ app: 'comedyos', v: 1, jokes, sets }, null, 2)], { type: 'application/json' });
   if (await shareFile(blob, backupName())) { markBackup(); if (!stage.running) go(tab); }
 }
+// «Добавить»: новые шутки и сеты из копии дописываются, текущие не меняются (только достраиваются оценки и состав сетов)
+function mergeBackup(d) {
+  const have = new Map(jokes.map(j => [j.id, j]));
+  let added = 0;
+  for (const j of d.jokes) {
+    if (!j || !j.id) continue;
+    const e = have.get(j.id);
+    if (!e) { jokes.push(j); have.set(j.id, j); added++; }
+    else for (const r of j.rates || []) if (!(e.rates || []).some(x => x.p === r.p)) e.rates = [...(e.rates || []), r].sort((a, b) => a.d - b.d);
+  }
+  const sh = new Map(sets.map(s => [s.id, s]));
+  for (const s of d.sets) {
+    if (!s || !s.id) continue;
+    const items = Array.isArray(s.items) ? s.items : [], e = sh.get(s.id);
+    if (!e) { const c = { ...s, items: [...items] }; sets.push(c); sh.set(c.id, c); }
+    else items.forEach(i => { if (!e.items.includes(i)) e.items.push(i); });
+  }
+  return added;
+}
 async function restoreBackup(file) {
+  let d;
   try {
-    const d = JSON.parse(await file.text());
+    d = JSON.parse(await file.text());
     if (d.app !== 'comedyos' || !Array.isArray(d.jokes) || !Array.isArray(d.sets)) throw 0;
-    if (!confirm(`В копии: шуток ${d.jokes.length}, сетов ${d.sets.length}. Заменить текущие данные?`)) return;
-    jokes = d.jokes; sets = d.sets; save('jokes', jokes); save('sets', sets);
-    markBackup(); go(tab);
-  } catch { alert('Это не файл копии БАДДИ.'); }
+  } catch { return alert('Это не файл копии БАДДИ.'); }
+  tab = 'jokes'; document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === 'jokes'));
+  view.onclick = null;
+  view.innerHTML = `<h2>Восстановление</h2>
+    <p><small>В копии: ${plural(d.jokes.length)}, сетов ${d.sets.length}.<br>Сейчас на устройстве: ${plural(jokes.length)}, сетов ${sets.length}.</small></p>
+    <button class="b wide" id="mg">Добавить к текущим</button>
+    <small class="rn">Ничего не удаляется: из копии допишутся шутки и сеты, которых у тебя нет.</small>
+    <button class="b g wide" id="rp" style="margin-top:14px">Заменить всё копией</button>
+    <small class="rn">Текущие шутки, сеты и оценки удалятся, останется то, что в копии.</small>
+    <button class="b g" id="cn" style="margin-top:14px">Отмена</button>`;
+  document.getElementById('cn').onclick = () => go('jokes');
+  document.getElementById('mg').onclick = () => {
+    const added = mergeBackup(d); save('jokes', jokes); save('sets', sets);
+    alert(added ? `Добавлено шуток: ${added}.` : 'Новых шуток в копии не было.'); go('jokes');
+  };
+  document.getElementById('rp').onclick = () => {
+    if (!confirm('Текущие данные будут заменены копией. Продолжить?')) return;
+    jokes = d.jokes; sets = d.sets; save('jokes', jokes); save('sets', sets); markBackup(); go('jokes');
+  };
 }
 
 // ---------- меню ⋯ (копии, импорт) ----------
