@@ -79,16 +79,17 @@ button.del{display:block;margin:22px auto 0;background:none;color:var(--danger);
 .srow button.ic[data-rm]{background:rgba(255,90,95,.14);color:var(--danger)}
 /* сцена */
 .stage{text-align:center}
-.time{font:700 clamp(72px,26vw,140px)/1 var(--head);font-variant-numeric:tabular-nums;color:var(--green);letter-spacing:-1px}
+.time{font:700 clamp(60px,20vw,110px)/1 var(--head);font-variant-numeric:tabular-nums;color:var(--green);letter-spacing:-1px}
 .time.warn{color:var(--y)}.time.over{color:var(--danger)}
 .ctrl{display:flex;gap:10px;margin:14px 0 10px}
 .ctrl .b{flex:1;margin:0;padding:15px;font-size:22px}
-.hint{display:block;margin:8px 0 14px}
+.hint{display:block;margin:6px 0 10px;font-size:12px}
 .setlist{text-align:left}
-.si{padding:10px 6px;cursor:pointer;border-radius:12px}
-.si h3{margin:0;font:700 clamp(20px,6.4vw,30px)/1.15 var(--head);text-transform:uppercase;letter-spacing:.3px;overflow-wrap:anywhere}
+.si{padding:5px 8px;cursor:pointer;border-radius:10px}
+.si h3{margin:0;font:600 17px/1.2 var(--head);text-transform:uppercase;letter-spacing:.3px;overflow-wrap:anywhere}
 .si.done h3{color:#5e5c57}
-.si.cur{background:var(--surface);border:2px solid var(--y);padding:14px;margin:6px 0}
+.si.cur{background:var(--surface);border:2px solid var(--y);padding:8px 10px;margin:3px 0}
+.si.cur h3{font-size:21px;font-weight:700}
 .si.cur h3{color:var(--y)}
 .si.peek{background:var(--surface)}
 .si .txt{white-space:pre-wrap;font-size:17px;line-height:1.5;margin-top:10px;color:var(--text)}
@@ -136,3 +137,5 @@ body.light-warn .ctrl .b:not(.g){background:var(--y-ink);color:var(--y)}
 body.light-over .ctrl .b:not(.g){background:#fff;color:#d7262c}
 body.light-warn #stop{background:rgba(0,0,0,.82);color:#ff7a7e}
 body.light-over #stop{background:rgba(0,0,0,.35);color:#fff}
+
+.stage #stop{margin-top:14px}

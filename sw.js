@@ -1,4 +1,4 @@
-const C = 'buddy-v15';
+const C = 'buddy-v16';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'fonts/Oswald.ttf', 'fonts/Manrope.ttf',
   'icons/head-96.png', 'icons/favicon-64.png', 'icons/apple-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));

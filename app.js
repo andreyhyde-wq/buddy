@@ -261,7 +261,7 @@ function editJoke(id, from) {
   view.innerHTML = `<div class="topbar"><button class="b g sm" id="back">← Назад</button><b>${j.isNew ? 'Новая шутка' : 'Шутка'}</b>
       <button class="b sm" id="ok">Сохранить</button></div>
     <input id="t" placeholder="Название (его видно на сцене)" value="${esc(j.title)}">
-    <textarea id="x" placeholder="Сетап… панчлайн… теги">${esc(j.text)}</textarea>
+    <textarea id="x" placeholder="Сетап… панчлайн…">${esc(j.text)}</textarea>
     <input id="g" placeholder="Теги через пробел (напр. работа семья)" value="${esc((j.tags || []).join(' '))}">
     <label class="lab">Длительность, мин</label>
     <input id="s" type="text" inputmode="decimal" value="${String(Math.round(j.secs / 0.6) / 100).replace('.', ',')}">
@@ -398,25 +398,22 @@ function drawStage() {
   const s = sets.find(x => x.id === stage.setId);
   view.innerHTML = `<div class="stage"><div class="time" id="time"></div>
     <small id="sub"></small>
-    <div class="ctrl"><button class="b g" id="prev">←</button><button class="b" id="next">→</button></div>
-    <small class="hint">${stage.mr ? '● идёт запись' : 'без записи'} · нажми на любую шутку — покажу текст, не переключая. Переключение — стрелками</small>
+    <small class="hint">${stage.mr ? '● идёт запись' : 'без записи'} · нажми на шутку — она станет текущей · ещё раз — весь текст</small>
     <div class="setlist" id="sl">${s.items.map((id, n) => {
       const q = jokes.find(x => x.id === id); if (!q) return '';
-      const open = stage.full === id;
-      const cls = (n < stage.idx ? 'done' : n === stage.idx ? 'cur' : '') + (open && n !== stage.idx ? ' peek' : '');
-      return `<div class="si ${cls}" data-go="${n}"><h3>${n + 1}. ${esc(q.title || q.text.slice(0, 30))}</h3>${open ? `<div class="txt">${esc(q.text)}</div>` : ''}</div>`;
+      const cls = n < stage.idx ? 'done' : n === stage.idx ? 'cur' : '';
+      return `<div class="si ${cls}" data-go="${n}"><h3>${n + 1}. ${esc(q.title || q.text.slice(0, 30))}</h3>${n === stage.idx && stage.full === id ? `<div class="txt">${esc(q.text)}</div>` : ''}</div>`;
     }).join('') || '<small>Сет-лист пуст</small>'}</div>
-    ${stage.idx >= s.items.length ? '<h3>Сет закончился</h3>' : ''}
-    <br><button class="b r" id="stop">■ Закончить</button></div>`;
+    <button class="b r" id="stop">■ Закончить</button></div>`;
   drawTime();
   const $ = i => document.getElementById(i);
-  $('prev').onclick = () => { stage.idx = Math.max(0, stage.idx - 1); stage.full = null; drawStage(); };
-  $('next').onclick = () => { stage.idx = Math.min(s.items.length, stage.idx + 1); stage.full = null; drawStage(); };
   $('stop').onclick = stopShow;
+  // нажатие на шутку делает её текущей (все выше — рассказаны, ниже — нет); на текущую — раскрыть/свернуть текст
   $('sl').onclick = e => {
     const n = e.target.closest('[data-go]')?.dataset.go; if (n === undefined) return;
-    // подсмотреть любую шутку: текст раскрывается, текущая шутка не меняется
-    const id = s.items[+n]; stage.full = stage.full === id ? null : id;
+    const id = s.items[+n];
+    if (+n === stage.idx) stage.full = stage.full === id ? null : id;
+    else { stage.idx = +n; stage.full = null; }
     drawStage();
   };
 }
