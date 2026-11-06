@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>БАДДИ в SIDEQUEST — опрос, раунд 1</title>
+<style>
+  :root { color-scheme: dark; --ink:#171717; --ink2:#222; --line:#3a3a38; --paper:#F1EFE8; --muted:#B9B5AC; --yellow:#F5E500; --purple:#A98BFF; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font: 500 16px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 18px 120px; }
+  h1 { font-size: 26px; margin: 0 0 4px; } .sub { color: var(--muted); margin: 0 0 26px; }
+  .q { background: var(--ink2); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin: 0 0 16px; }
+  .q h2 { font-size: 17px; margin: 0 0 6px; } .q h2 b { color: var(--yellow); margin-right: 6px; }
+  .q p { margin: 0 0 12px; color: var(--muted); }
+  label.opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin: 6px 0; cursor: pointer; }
+  label.opt:hover { border-color: var(--muted); }
+  label.opt:has(input:checked) { border-color: var(--yellow); background: #2a2810; }
+  label.opt input { margin-top: 4px; accent-color: var(--yellow); }
+  .rec { font-size: 12px; font-weight: 700; color: var(--ink); background: var(--yellow); border-radius: 6px; padding: 1px 6px; margin-left: 6px; white-space: nowrap; }
+  textarea { width: 100%; min-height: 44px; margin-top: 6px; background: var(--ink); color: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; resize: vertical; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: rgb(23 23 23 / .95); border-top: 1px solid var(--line); padding: 12px 18px; display: flex; gap: 12px; justify-content: center; align-items: center; }
+  button { background: var(--yellow); color: var(--ink); border: 0; border-radius: 10px; padding: 12px 22px; font: 700 16px system-ui; cursor: pointer; }
+  #st { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>БАДДИ в SIDEQUEST · раунд 1</h1>
+  <p class="sub">Рекомендация уже отмечена. Поменяй, где не согласен, допиши своё — и нажми «Скопировать ответы», потом вставь в чат.</p>
+  <form id="f"></form>
+</main>
+<div class="bar"><button type="button" id="copy">Скопировать ответы</button><span id="st"></span></div>
+<script>
+const Q = [
+  { t: 'Ты сейчас пользуешься БАДДИ на майках?', p: 'Проверил: рабочего адреса у БАДДИ сейчас нет. GitHub Pages выключен 30.10, на сервере лежит только резервная копия кода, приложение не запущено. Телефон, скорее всего, открывает старую версию из кеша. От ответа зависит, насколько срочна выкладка.', o: [
+    ['Да, регулярно: выкладку делаем первой'],
+    ['Пробовал пару раз, сейчас не пользуюсь', true],
+    ['Не открывал с 27.10'] ] },
+  { t: 'Кому SIDEQUEST предлагает БАДДИ', p: 'Сейчас на сайте один резидент, ты. Одних резидентов мало, чтобы понять, нужно ли приложение кому-то кроме тебя.', o: [
+    ['Резидентам и участникам майков SIDEQUEST', true],
+    ['Только резидентам, как бонус'],
+    ['Всем комикам, открытая ссылка с сайта'] ] },
+  { t: 'Адрес', p: 'На сервере уже стоит Caddy, через него работает сайт. Поддомен потребует записи у регистратора домена. При любом адресе шутки со старого телефона переносятся файлом копии.', o: [
+    ['spbsidequest.com/buddy: одна правка на сервере, DNS не трогаем', true],
+    ['buddy.spbsidequest.com: отдельный поддомен'],
+    ['Свой домен под БАДДИ'] ] },
+  { t: 'Где хранятся шутки на старте', p: 'Синхронизация между устройствами означает сервер, вход и шутки, связанные с именем комика, на литовском VPS. Это тот самый вопрос о персональных данных, из-за которого 28.10 отложили v2. Логины админки сайта уже лежат там же.', o: [
+    ['Пока только на телефоне, как сейчас, плюс файл копии. Синхронизацию решаем после проверки спроса', true],
+    ['Сразу синхронизация на сервере SIDEQUEST с логином из админки'],
+    ['Ждём российский VPS, до этого вообще не выкладываем'] ] },
+  { t: 'Бренд', p: 'Сайт SIDEQUEST тёмный, с жёлтым #F5E500 и наклонными плашками. БАДДИ жёлто-фиолетовый, с корги.', o: [
+    ['«БАДДИ от SIDEQUEST»: корги остаётся, цвета и шрифты от SIDEQUEST, подпись в меню', true],
+    ['Оставить БАДДИ как есть, отдельным брендом'],
+    ['Полностью переименовать в SIDEQUEST'] ] },
+  { t: 'Технику делаю без отдельных вопросов', p: 'Шрифты рядом с приложением, а не с Google. Шутки переносим из localStorage в IndexedDB, там надёжнее и больше места. Иконка для Android, которая не обрезается. Подсказка для iPhone: установи на экран «Домой», иначе Safari может стереть данные через 7 дней. Внешне ничего не меняется.', o: [
+    ['Да, делай', true],
+    ['Только шрифты и подсказку'],
+    ['Пока не трогай'] ] },
+  { t: 'Что добавить первым', p: '«Свет»: за N минут до конца экран меняет цвет и телефон вибрирует. Запись по шуткам: сцена запоминает, когда ты переключил шутку, и после выступления каждую можно прослушать отдельно. Репетиция: длительность шуток по факту прогона. Журнал: где и сколько раз рассказывал шутку и с какими оценками.', o: [
+    ['«Свет», потом запись по шуткам', true],
+    ['Сначала запись по шуткам'],
+    ['Сначала репетиция'],
+    ['Сначала журнал выступлений'] ] },
+  { t: 'Как проверяем, что БАДДИ нужен не только тебе', p: '28.10 договорились дать приложение 5–10 комикам и через 2 недели спросить, кто пользуется. Этого не сделали. Счётчик открытий отправлял бы данные на сервер, это лишний вопрос приватности.', o: [
+    ['Даю ссылку 5–10 комикам с майков, через 2 недели спрашиваю лично. Без счётчиков', true],
+    ['Отдельный Telegram-чат БАДДИ для отзывов'],
+    ['Не проверяем, просто раздаём'] ] },
+  { t: 'Деньги', p: 'Новички почти не платят за инструменты, а «Заметки» и секундомер бесплатны. Для SIDEQUEST польза другая: комики приходят через приложение на майки, а у Андрея репутация человека, который сделал инструмент для комиков.', o: [
+    ['Бесплатно для всех, монетизацию не обсуждаем до сотни пользователей', true],
+    ['Бесплатно для резидентов, платно для остальных'] ] }
+];
+const f = document.getElementById('f');
+Q.forEach((q, i) => {
+  const n = i + 1, box = document.createElement('section'); box.className = 'q';
+  box.innerHTML = `<h2><b>Q${n}</b>${q.t}</h2><p>${q.p}</p>` +
+    q.o.map(([txt, rec], j) => `<label class="opt"><input type="radio" name="q${n}" value="${j}" ${rec ? 'checked' : ''}><span>${txt}${rec ? '<span class="rec">рекомендую</span>' : ''}</span></label>`).join('') +
+    `<label class="opt"><input type="radio" name="q${n}" value="own"><span>Свой ответ (напиши ниже)</span></label><textarea name="c${n}" placeholder="Комментарий или свой вариант — необязательно"></textarea>`;
+  f.appendChild(box);
+});
+f.addEventListener('input', e => { if (e.target.tagName === 'TEXTAREA' && e.target.value.trim()) { const r = f.querySelector(`[name=q${e.target.name.slice(1)}][value=own]`); if (!f.querySelector(`[name=q${e.target.name.slice(1)}]:checked`)) r.checked = true; } });
+document.getElementById('copy').addEventListener('click', async () => {
+  const lines = Q.map((q, i) => {
+    const n = i + 1, v = f.querySelector(`[name=q${n}]:checked`)?.value, c = f.elements['c' + n].value.trim();
+    const ans = v == null ? '—' : v === 'own' ? 'свой ответ' : (q.o[v][1] ? 'да' : q.o[v][0]);
+    return `Q${n} — ${ans}${c ? ' · ' + c : ''}`;
+  });
+  const text = 'БАДДИ, раунд 1\n' + lines.join('\n');
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch {}
+  if (!ok) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); ok = document.execCommand('copy'); t.remove(); }
+  document.getElementById('st').textContent = ok ? 'Скопировано — вставь в чат' : 'Не удалось скопировать, выдели текст вручную';
+});
+</script>
+</body>
+</html>

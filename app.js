@@ -2,8 +2,31 @@
 // ---------- storage ----------
 // Один общий профиль на устройстве. Префикс buddyapp_ нарочно не совпадает со старыми ключами buddy_<имя>_*.
 const key = k => `buddyapp_${k}`;
-const load = (k, d) => JSON.parse(localStorage.getItem(key(k)) || 'null') ?? d;
-const save = (k, v) => localStorage.setItem(key(k), JSON.stringify(v));
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(key(k)) || 'null') ?? d; } catch { return d; } };
+// Шутки и сеты живут в IndexedDB (надёжнее и просторнее localStorage). Если IndexedDB недоступна — запасной путь через localStorage.
+// база без хранилища kv (например, создана пустой) — переоткрываем со следующей версией и создаём его
+const openDB = v => new Promise((res, rej) => {
+  const r = v ? indexedDB.open('buddyapp-data', v) : indexedDB.open('buddyapp-data');
+  r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
+  r.onsuccess = () => {
+    const db = r.result;
+    if (db.objectStoreNames.contains('kv')) return res(db);
+    const next = db.version + 1; db.close(); openDB(next).then(res, rej);
+  };
+  r.onerror = () => rej(r.error);
+});
+const DB = (() => { let p; return () => p ||= openDB(); })();
+const idbGet = k => DB().then(db => new Promise((res, rej) => {
+  const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+}));
+const idbSet = (k, v) => DB().then(db => new Promise((res, rej) => {
+  const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error);
+}));
+let useLS = false;
+const save = (k, v) => {
+  if (useLS) return localStorage.setItem(key(k), JSON.stringify(v));
+  idbSet(k, v).catch(() => { useLS = true; localStorage.setItem(key(k), JSON.stringify(v)); });
+};
 let jokes = [];
 let sets = [];
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -142,7 +165,8 @@ function openMenu() {
   panel.innerHTML = `<small class="${backupStale() ? 'stale' : ''}">${backupStatus()}</small>
     <button class="b g" id="m-exp">⇩ Сохранить копию</button>
     <button class="b g" id="m-rest">⇧ Восстановить из копии</button>
-    <button class="b g" id="m-imp">⇪ Импорт шуток из файла</button>`;
+    <button class="b g" id="m-imp">⇪ Импорт шуток из файла</button>
+    <small class="by">БАДДИ от <a href="/" target="_blank" rel="noopener">SIDEQUEST</a></small>`;
   panel.hidden = false;
   const busy = () => stage.running && (alert('Сначала закончи выступление.'), true);
   document.getElementById('m-exp').onclick = () => { closeMenu(); exportBackup(); };
@@ -161,13 +185,17 @@ document.getElementById('bfile').onchange = async e => {
 // ---------- jokes ----------
 const activeSet = () => sets.find(x => x.id === lastSetId()) || sets[0];
 const plural = n => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'шутка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'шутки' : 'шуток');
+// iPhone вне экрана «Домой»: Safari может стереть данные сайта через 7 дней без посещений
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const showIosHint = () => isIOS && !(matchMedia('(display-mode: standalone)').matches || navigator.standalone) && !localStorage.getItem(key('hint-ios'));
 const updateCount = () => { document.getElementById('who').textContent = plural(jokes.length); };
 function viewJokes() {
   updateCount();
   const a = backupAge();
   view.innerHTML = `<div class="bar"><input id="q" placeholder="Поиск по шуткам и тегам">
       <button class="b" id="new">＋ Шутка</button></div>
-    ${backupStale() ? `<button class="stale-bar" id="stale">⚠ ${a === null ? 'Копии ещё не было' : `Копии нет ${a} дн.`} — сохранить</button>` : ''}
+    ${showIosHint() ? `<button class="note" id="ios"><span>Добавь БАДДИ на экран «Домой»: «Поделиться» → «На экран „Домой“». В обычном Safari iPhone может стереть шутки, если сайт не открывать неделю.</span><b aria-label="Скрыть">✕</b></button>` : ''}
+    ${backupStale() ? `<button class="note" id="stale"><span>⚠ ${a === null ? 'Копии ещё не было' : `Копии нет ${a} дн.`} — сохранить</span></button>` : ''}
     <div id="list"></div>`;
   const draw = () => {
     const q = document.getElementById('q').value.toLowerCase();
@@ -182,6 +210,7 @@ function viewJokes() {
   document.getElementById('q').oninput = draw;
   document.getElementById('new').onclick = () => editJoke();
   if (document.getElementById('stale')) document.getElementById('stale').onclick = exportBackup;
+  if (document.getElementById('ios')) document.getElementById('ios').onclick = () => { localStorage.setItem(key('hint-ios'), '1'); viewJokes(); };
   document.getElementById('list').onclick = e => { const c = e.target.closest('.card'); if (c) editJoke(c.dataset.id); };
 }
 
@@ -268,6 +297,8 @@ function editJoke(id, from) {
 }
 
 // ---------- sets ----------
+// «свет»: за сколько минут до конца слота экран становится жёлтым (0 — выключен; красный на нуле остаётся)
+const lightMin = s => (Number.isFinite(s.light) ? s.light : 1);
 const setTime = s => s.items.reduce((a, i) => a + (jokes.find(j => j.id === i)?.secs || 0), 0);
 function createSet() {
   const name = prompt('Название сета (напр. «Open mic в пятницу»)'); if (!name) return;
@@ -292,7 +323,8 @@ function editSet(id) {
     view.innerHTML = `<div class="topbar"><button class="b g sm" id="all">☰ Все сеты</button><button class="b g sm" id="mk">＋ Новый</button></div>
       <h2>${esc(s.name)}</h2>
       <div class="card stat"><div><small>Материал / слот</small><b>${fmt(setTime(s))} / ${s.limit}:00</b></div>
-        <div><small>Слот, мин</small><input id="lim" type="number" min="1" value="${s.limit}"></div></div>
+        <div class="two"><div><small>Слот, мин</small><input id="lim" type="number" min="1" value="${s.limit}"></div>
+        <div><small title="За сколько минут до конца экран станет жёлтым">Свет, мин</small><input id="lt" type="text" inputmode="decimal" value="${String(lightMin(s)).replace('.', ',')}"></div></div></div>
       ${s.items.map((i, n) => { const j = jokes.find(x => x.id === i); return j ? `<div class="card srow">
         <span class="n">${n + 1}</span><span class="tt"><span class="t" data-open="${j.id}">${esc(j.title || j.text.slice(0, 30))}</span><span class="m">${minStr(j.secs)}</span></span>
         <button class="b ic" data-up="${n}">↑</button><button class="b ic" data-dn="${n}">↓</button>
@@ -305,6 +337,7 @@ function editSet(id) {
     $('all').onclick = () => viewSets(true);
     $('mk').onclick = createSet;
     $('lim').onchange = () => { s.limit = +$('lim').value || 5; save('sets', sets); draw(); };
+    $('lt').onchange = () => { const v = parseFloat($('lt').value.replace(',', '.')); s.light = Number.isFinite(v) && v >= 0 ? v : 1; save('sets', sets); draw(); };
     $('add').onchange = () => { if ($('add').value) { s.items.push($('add').value); save('sets', sets); draw(); } };
     $('go').onclick = () => go('stage');
     $('del').onclick = () => {
@@ -326,14 +359,22 @@ function editSet(id) {
 }
 
 // ---------- stage ----------
-const stage = { setId: null, idx: 0, running: false, t0: 0, mr: null, chunks: [], stream: null, wake: null, tick: null, full: null };
+const stage = { setId: null, idx: 0, running: false, t0: 0, mr: null, chunks: [], stream: null, wake: null, tick: null, full: null, light: '' };
+const setLight = st => {
+  if (st === stage.light) return;
+  stage.light = st;
+  document.body.classList.toggle('light-warn', st === 'warn');
+  document.body.classList.toggle('light-over', st === 'over');
+  if (st) navigator.vibrate?.(st === 'over' ? [400, 150, 400] : [200, 100, 200]); // на iPhone вибрации нет — только цвет
+};
 function viewStage() {
   if (stage.running) return drawStage();
   const cur = activeSet();
   if (!cur) return view.innerHTML = '<div class="stage"><small>Сначала создай сет-лист.</small></div>';
   view.innerHTML = `<div class="stage"><div class="time" id="time">${fmt((cur.limit || 5) * 60)}</div>
     <select id="set">${sets.map(s => `<option value="${s.id}" ${s.id === cur.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
-    <small>Звук зала запишется автоматически — браузер спросит доступ к микрофону.</small><br><br>
+    <small>${lightMin(cur) ? `Свет: за ${String(lightMin(cur)).replace('.', ',')} мин до конца экран станет жёлтым, на нуле — красным.` : 'Свет выключен: красным экран станет только на нуле.'}<br>
+    Звук зала запишется автоматически — браузер спросит доступ к микрофону.</small><br><br>
     <button class="b v wide" id="go">▶ Начать выступление</button></div>`;
   document.getElementById('set').onchange = e => { setLast(e.target.value); viewStage(); };
   document.getElementById('go').onclick = startShow;
@@ -341,7 +382,7 @@ function viewStage() {
 async function startShow() {
   const sel = document.getElementById('set').value; if (!sel) return alert('Нет сет-листа');
   setLast(sel);
-  stage.setId = sel; stage.idx = 0; stage.chunks = []; stage.mr = null; stage.full = null;
+  stage.setId = sel; stage.idx = 0; stage.chunks = []; stage.mr = null; stage.full = null; setLight('');
   try {
     stage.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stage.mr = new MediaRecorder(stage.stream);
@@ -358,11 +399,12 @@ function drawStage() {
   view.innerHTML = `<div class="stage"><div class="time" id="time"></div>
     <small id="sub"></small>
     <div class="ctrl"><button class="b g" id="prev">←</button><button class="b" id="next">→</button></div>
-    <small class="hint">${stage.mr ? '● идёт запись' : 'без записи'} · нажми на название — покажу текст целиком</small>
+    <small class="hint">${stage.mr ? '● идёт запись' : 'без записи'} · нажми на любую шутку — покажу текст, не переключая. Переключение — стрелками</small>
     <div class="setlist" id="sl">${s.items.map((id, n) => {
       const q = jokes.find(x => x.id === id); if (!q) return '';
-      const cls = n < stage.idx ? 'done' : n === stage.idx ? 'cur' : '';
-      return `<div class="si ${cls}" data-go="${n}"><h3>${n + 1}. ${esc(q.title || q.text.slice(0, 30))}</h3>${cls === 'cur' && stage.full === id ? `<div class="txt">${esc(q.text)}</div>` : ''}</div>`;
+      const open = stage.full === id;
+      const cls = (n < stage.idx ? 'done' : n === stage.idx ? 'cur' : '') + (open && n !== stage.idx ? ' peek' : '');
+      return `<div class="si ${cls}" data-go="${n}"><h3>${n + 1}. ${esc(q.title || q.text.slice(0, 30))}</h3>${open ? `<div class="txt">${esc(q.text)}</div>` : ''}</div>`;
     }).join('') || '<small>Сет-лист пуст</small>'}</div>
     ${stage.idx >= s.items.length ? '<h3>Сет закончился</h3>' : ''}
     <br><button class="b r" id="stop">■ Закончить</button></div>`;
@@ -373,8 +415,8 @@ function drawStage() {
   $('stop').onclick = stopShow;
   $('sl').onclick = e => {
     const n = e.target.closest('[data-go]')?.dataset.go; if (n === undefined) return;
-    if (+n === stage.idx) { const id = s.items[stage.idx]; stage.full = stage.full === id ? null : id; }
-    else { stage.idx = +n; stage.full = null; }
+    // подсмотреть любую шутку: текст раскрывается, текущая шутка не меняется
+    const id = s.items[+n]; stage.full = stage.full === id ? null : id;
     drawStage();
   };
 }
@@ -382,13 +424,15 @@ function drawTime() {
   const el = document.getElementById('time'); if (!el) return;
   const s = sets.find(x => x.id === stage.setId), left = s.limit * 60 - (Date.now() - stage.t0) / 1000;
   el.textContent = (left < 0 ? '+' : '') + fmt(Math.abs(left));
-  el.className = 'time' + (left < 0 ? ' over' : left < 60 ? ' warn' : '');
+  const warnAt = lightMin(s) * 60, st = left < 0 ? 'over' : warnAt > 0 && left <= warnAt ? 'warn' : '';
+  el.className = 'time' + (st ? ' ' + st : '');
+  if (stage.running) setLight(st);
   const sub = document.getElementById('sub');
   if (sub) sub.textContent = `прошло ${fmt((Date.now() - stage.t0) / 1000)} из ${s.limit}:00`;
 }
 async function stopShow() {
   if (!confirm('Закончить выступление?')) return;
-  clearInterval(stage.tick); stage.running = false;
+  clearInterval(stage.tick); stage.running = false; setLight('');
   const duration = (Date.now() - stage.t0) / 1000;
   stage.wake?.release?.();
   let blob = null, ext = 'webm';
@@ -429,7 +473,16 @@ function drawResult(s, duration, blob, ext) {
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-migrate();
-jokes = load('jokes', []); sets = load('sets', []);
 navigator.storage?.persist?.().catch(() => {}); // просим браузер не стирать данные при нехватке места
-go('jokes');
+(async () => {
+  migrate();
+  try {
+    let j = await idbGet('jokes'), st = await idbGet('sets');
+    if (j === undefined && st === undefined) { // первый запуск версии с IndexedDB: переносим из localStorage, старое не удаляем
+      j = load('jokes', []); st = load('sets', []);
+      if (j.length || st.length) { await idbSet('jokes', j); await idbSet('sets', st); }
+    }
+    jokes = Array.isArray(j) ? j : []; sets = Array.isArray(st) ? st : [];
+  } catch { useLS = true; jokes = load('jokes', []); sets = load('sets', []); }
+  go('jokes');
+})();
