@@ -196,8 +196,8 @@ function viewJokes() {
   const a = backupAge();
   view.innerHTML = `<div class="bar"><input id="q" placeholder="Поиск по шуткам и тегам">
       <button class="b" id="new">＋ Шутка</button></div>
+    ${showHowHint() ? `<button class="note how" id="how"><span><i>Краткая инструкция</i>Записываешь <b>ШУТКИ</b> → собираешь из них <b>СЕТ-ЛИСТ</b> → с сет-листом выходишь <b>НА СЦЕНУ</b>. А там уже магия.</span><b aria-label="Скрыть">✕</b></button>` : ''}
     ${showIosHint() ? `<button class="note" id="ios"><span>Добавь БАДДИ на экран «Домой»: «Поделиться» → «На экран „Домой“». В обычном Safari iPhone может стереть шутки, если сайт не открывать неделю.</span><b aria-label="Скрыть">✕</b></button>` : ''}
-    ${showHowHint() ? `<button class="note how" id="how"><span>Записываешь <b>ШУТКИ</b> → собираешь из них <b>СЕТ-ЛИСТ</b> → с сет-листом выходишь <b>НА СЦЕНУ</b>. А там уже магия.</span><b aria-label="Скрыть">✕</b></button>` : ''}
     ${backupStale() ? `<button class="note" id="stale"><span>⚠ ${a === null ? 'Копии ещё не было' : `Копии нет ${a} дн.`} — сохранить</span></button>` : ''}
     <div id="list"></div>`;
   const draw = () => {
