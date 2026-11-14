@@ -141,3 +141,6 @@ body.light-over #stop{background:rgba(0,0,0,.35);color:#fff}
 .stage #stop{margin-top:14px}
 .note.how span b{color:var(--text);font:700 13px var(--head);letter-spacing:.4px}
 .note.how span i{display:block;font-style:normal;font-weight:800;margin-bottom:2px}
+div.note{cursor:default}
+.note #and-x{cursor:pointer}
+.note .inst{display:flex;margin:8px 0 0;padding:8px 14px;font-size:13px}

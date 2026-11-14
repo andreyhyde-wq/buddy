@@ -187,6 +187,13 @@ const activeSet = () => sets.find(x => x.id === lastSetId()) || sets[0];
 const plural = n => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'шутка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'шутки' : 'шуток');
 // iPhone вне экрана «Домой»: Safari может стереть данные сайта через 7 дней без посещений
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// Android: кнопка «Установить» через системное окно браузера; где его нет — подсказка про меню ⋮
+const isAndroid = /Android/i.test(navigator.userAgent);
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (tab === 'jokes' && !stage.running) viewJokes(); });
+window.addEventListener('appinstalled', () => { installEvt = null; localStorage.setItem(key('hint-android'), '1'); if (tab === 'jokes') viewJokes(); });
+const showAndroidHint = () => isAndroid && !isStandalone() && !localStorage.getItem(key('hint-android'));
 const showIosHint = () => isIOS && !(matchMedia('(display-mode: standalone)').matches || navigator.standalone) && !localStorage.getItem(key('hint-ios'));
 // подсказка «как пользоваться»: пока шуток меньше трёх и её не закрыли
 const showHowHint = () => jokes.length < 3 && !localStorage.getItem(key('hint-how'));
@@ -198,6 +205,7 @@ function viewJokes() {
       <button class="b" id="new">＋ Шутка</button></div>
     ${showHowHint() ? `<button class="note how" id="how"><span><i>Краткая инструкция</i>Записываешь <b>ШУТКИ</b> → собираешь из них <b>СЕТ-ЛИСТ</b> → с сет-листом выходишь <b>НА СЦЕНУ</b>. А там уже магия.</span><b aria-label="Скрыть">✕</b></button>` : ''}
     ${showIosHint() ? `<button class="note" id="ios"><span>Добавь БАДДИ на экран «Домой»: «Поделиться» → «На экран „Домой“». В обычном Safari iPhone может стереть шутки, если сайт не открывать неделю.</span><b aria-label="Скрыть">✕</b></button>` : ''}
+    ${showAndroidHint() ? `<div class="note" id="and"><span>${installEvt ? 'Поставь БАДДИ на рабочий стол — откроется как обычное приложение, без браузера.' : 'Поставь БАДДИ на рабочий стол: меню ⋮ браузера → «Установить приложение» или «Добавить на главный экран».'}${installEvt ? '<button class="b sm inst" id="inst">Установить</button>' : ''}</span><b id="and-x" aria-label="Скрыть">✕</b></div>` : ''}
     ${backupStale() ? `<button class="note" id="stale"><span>⚠ ${a === null ? 'Копии ещё не было' : `Копии нет ${a} дн.`} — сохранить</span></button>` : ''}
     <div id="list"></div>`;
   const draw = () => {
@@ -215,6 +223,12 @@ function viewJokes() {
   if (document.getElementById('stale')) document.getElementById('stale').onclick = exportBackup;
   if (document.getElementById('how')) document.getElementById('how').onclick = () => { localStorage.setItem(key('hint-how'), '1'); viewJokes(); };
   if (document.getElementById('ios')) document.getElementById('ios').onclick = () => { localStorage.setItem(key('hint-ios'), '1'); viewJokes(); };
+  if (document.getElementById('and-x')) document.getElementById('and-x').onclick = () => { localStorage.setItem(key('hint-android'), '1'); viewJokes(); };
+  if (document.getElementById('inst')) document.getElementById('inst').onclick = async () => {
+    const e = installEvt; if (!e) return; installEvt = null; e.prompt();
+    try { const r = await e.userChoice; if (r.outcome === 'accepted') localStorage.setItem(key('hint-android'), '1'); } catch {}
+    viewJokes();
+  };
   document.getElementById('list').onclick = e => { const c = e.target.closest('.card'); if (c) editJoke(c.dataset.id); };
 }
 
