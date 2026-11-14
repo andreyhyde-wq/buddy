@@ -188,6 +188,8 @@ const plural = n => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'шутка' : [
 // iPhone вне экрана «Домой»: Safari может стереть данные сайта через 7 дней без посещений
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const showIosHint = () => isIOS && !(matchMedia('(display-mode: standalone)').matches || navigator.standalone) && !localStorage.getItem(key('hint-ios'));
+// подсказка «как пользоваться»: пока шуток меньше трёх и её не закрыли
+const showHowHint = () => jokes.length < 3 && !localStorage.getItem(key('hint-how'));
 const updateCount = () => { document.getElementById('who').textContent = plural(jokes.length); };
 function viewJokes() {
   updateCount();
@@ -195,6 +197,7 @@ function viewJokes() {
   view.innerHTML = `<div class="bar"><input id="q" placeholder="Поиск по шуткам и тегам">
       <button class="b" id="new">＋ Шутка</button></div>
     ${showIosHint() ? `<button class="note" id="ios"><span>Добавь БАДДИ на экран «Домой»: «Поделиться» → «На экран „Домой“». В обычном Safari iPhone может стереть шутки, если сайт не открывать неделю.</span><b aria-label="Скрыть">✕</b></button>` : ''}
+    ${showHowHint() ? `<button class="note how" id="how"><span>Записываешь <b>ШУТКИ</b> → собираешь из них <b>СЕТ-ЛИСТ</b> → с сет-листом выходишь <b>НА СЦЕНУ</b>. А там уже магия.</span><b aria-label="Скрыть">✕</b></button>` : ''}
     ${backupStale() ? `<button class="note" id="stale"><span>⚠ ${a === null ? 'Копии ещё не было' : `Копии нет ${a} дн.`} — сохранить</span></button>` : ''}
     <div id="list"></div>`;
   const draw = () => {
@@ -210,6 +213,7 @@ function viewJokes() {
   document.getElementById('q').oninput = draw;
   document.getElementById('new').onclick = () => editJoke();
   if (document.getElementById('stale')) document.getElementById('stale').onclick = exportBackup;
+  if (document.getElementById('how')) document.getElementById('how').onclick = () => { localStorage.setItem(key('hint-how'), '1'); viewJokes(); };
   if (document.getElementById('ios')) document.getElementById('ios').onclick = () => { localStorage.setItem(key('hint-ios'), '1'); viewJokes(); };
   document.getElementById('list').onclick = e => { const c = e.target.closest('.card'); if (c) editJoke(c.dataset.id); };
 }

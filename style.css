@@ -139,3 +139,4 @@ body.light-warn #stop{background:rgba(0,0,0,.82);color:#ff7a7e}
 body.light-over #stop{background:rgba(0,0,0,.35);color:#fff}
 
 .stage #stop{margin-top:14px}
+.note.how span b{color:var(--text);font:700 13px var(--head);letter-spacing:.4px}
