@@ -198,14 +198,22 @@ const showIosHint = () => isIOS && !(matchMedia('(display-mode: standalone)').ma
 // подсказка «как пользоваться»: пока шуток меньше трёх и её не закрыли
 const showHowHint = () => jokes.length < 3 && !localStorage.getItem(key('hint-how'));
 const updateCount = () => { document.getElementById('who').textContent = plural(jokes.length); };
+// карточка установки: шаги с иконками; steps=null — одна кнопка «Установить» (Android с системным окном)
+const IC_SHARE = '<svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11v9h12v-9"/></svg>';
+const IC_PLUS = '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>';
+const IC_DOTS = '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg>';
+const installCard = (id, title, store, steps, fine) => `<div class="inst-card" id="${id}"><b class="x" id="${id}-x" aria-label="Скрыть">✕</b>
+  <h4>${title}</h4><p class="why">В ${store} искать не нужно — приложение ставится прямо отсюда${steps ? ' за 3 шага' : ' в одно нажатие'}. Появится иконка, а шутки будут надёжно храниться на телефоне.</p>
+  ${steps ? `<div class="steps">${steps.map((x, i) => `<div class="st"><span class="n">${i + 1}</span><span class="t">${x[0]}</span>${x[1] ? `<span class="ic">${x[1]}</span>` : ''}</div>`).join('')}</div>` : '<button class="b wide" id="inst">Установить</button>'}
+  ${fine ? `<p class="fine">${fine}</p>` : ''}</div>`;
 function viewJokes() {
   updateCount();
   const a = backupAge();
   view.innerHTML = `<div class="bar"><input id="q" placeholder="Поиск по шуткам и тегам">
       <button class="b" id="new">＋ Шутка</button></div>
     ${showHowHint() ? `<button class="note how" id="how"><span><i>Краткая инструкция</i>Записываешь <b>ШУТКИ</b> → собираешь из них <b>СЕТ-ЛИСТ</b> → с сет-листом выходишь <b>НА СЦЕНУ</b>.</span><b aria-label="Скрыть">✕</b></button>` : ''}
-    ${showIosHint() ? `<button class="note" id="ios"><span>Добавь БАДДИ на экран «Домой»: «Поделиться» → «На экран „Домой“». В обычном Safari iPhone может стереть шутки, если сайт не открывать неделю.</span><b aria-label="Скрыть">✕</b></button>` : ''}
-    ${showAndroidHint() ? `<div class="note" id="and"><span>${installEvt ? 'Поставь БАДДИ на рабочий стол — откроется как обычное приложение, без браузера.' : 'Поставь БАДДИ на рабочий стол: меню ⋮ браузера → «Установить приложение» или «Добавить на главный экран».'}${installEvt ? '<button class="b sm inst" id="inst">Установить</button>' : ''}</span><b id="and-x" aria-label="Скрыть">✕</b></div>` : ''}
+    ${showIosHint() ? installCard('ios', 'УСТАНОВИ БАДДИ НА IPHONE', 'App Store', [['Нажми «Поделиться» внизу Safari', IC_SHARE], ['Выбери «На экран „Домой“»', IC_PLUS], ['Открывай БАДДИ с иконки', '']], 'Без установки iPhone может со временем очистить данные сайта.') : ''}
+    ${showAndroidHint() ? installCard('and', 'УСТАНОВИ БАДДИ НА ТЕЛЕФОН', 'Google Play', installEvt ? null : [['Нажми ⋮ в углу браузера', IC_DOTS], ['Выбери «Установить приложение» или «Добавить на главный экран»', IC_PLUS], ['Открывай БАДДИ с иконки', '']], '') : ''}
     ${backupStale() ? `<button class="note" id="stale"><span>⚠ ${a === null ? 'Копии ещё не было' : `Копии нет ${a} дн.`} — сохранить</span></button>` : ''}
     <div id="list"></div>`;
   const draw = () => {
@@ -222,7 +230,7 @@ function viewJokes() {
   document.getElementById('new').onclick = () => editJoke();
   if (document.getElementById('stale')) document.getElementById('stale').onclick = exportBackup;
   if (document.getElementById('how')) document.getElementById('how').onclick = () => { localStorage.setItem(key('hint-how'), '1'); viewJokes(); };
-  if (document.getElementById('ios')) document.getElementById('ios').onclick = () => { localStorage.setItem(key('hint-ios'), '1'); viewJokes(); };
+  if (document.getElementById('ios-x')) document.getElementById('ios-x').onclick = () => { localStorage.setItem(key('hint-ios'), '1'); viewJokes(); };
   if (document.getElementById('and-x')) document.getElementById('and-x').onclick = () => { localStorage.setItem(key('hint-android'), '1'); viewJokes(); };
   if (document.getElementById('inst')) document.getElementById('inst').onclick = async () => {
     const e = installEvt; if (!e) return; installEvt = null; e.prompt();

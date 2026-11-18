@@ -142,5 +142,14 @@ body.light-over #stop{background:rgba(0,0,0,.35);color:#fff}
 .note.how span b{color:var(--text);font:700 13px var(--head);letter-spacing:.4px}
 .note.how span i{display:block;font-style:normal;font-weight:800;margin-bottom:2px}
 div.note{cursor:default}
-.note #and-x{cursor:pointer}
-.note .inst{display:flex;margin:8px 0 0;padding:8px 14px;font-size:13px}
+.inst-card{position:relative;background:var(--surface);border:1px solid rgba(245,229,0,.35);border-radius:16px;padding:14px;margin:0 0 10px}
+.inst-card .x{position:absolute;top:8px;right:8px;padding:4px 6px;color:var(--muted);font-size:14px;cursor:pointer}
+.inst-card h4{margin:0 26px 4px 0;font:700 16px var(--head);color:var(--y);letter-spacing:.4px}
+.inst-card .why{margin:0 0 12px;color:var(--text);font:500 12.5px/1.45 var(--body)}
+.inst-card .steps{display:flex;flex-direction:column;gap:8px}
+.inst-card .st{display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:12px;padding:8px 10px;color:var(--text);font:600 13px/1.35 var(--body)}
+.inst-card .st .t{flex:1}
+.inst-card .n{width:22px;height:22px;border-radius:50%;background:var(--y);color:var(--y-ink);display:grid;place-items:center;font:800 12px var(--body);flex:none}
+.inst-card .ic{width:30px;height:30px;border-radius:8px;background:var(--line);display:grid;place-items:center;flex:none}
+.inst-card .ic svg{width:18px;height:18px;stroke:#4da3ff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.inst-card .fine{margin:10px 0 0;color:var(--dim);font:500 11px/1.4 var(--body)}
